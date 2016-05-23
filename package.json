@@ -1,0 +1,29 @@
+{
+  "name": "node-dbf-reader-writer",
+  "version": "0.1.0",
+  "description": "A NodeJS 5.x or greater DBF 5.0 reader and writer",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/syndbg/node-dbf-reader-writer"
+  },
+  "keywords": [
+    "nodejs-5",
+    "nodejs-6",
+    "dbf-5",
+    "dbf-5.0",
+    "dbf-reader",
+    "dbf-writer",
+    "reader",
+    "writer"
+  ],
+  "author": "Anton Antonov <anton.synd.antonov@gmail.com> (https://github.com/syndbg/)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/syndbg/node-dbf-reader-writer/issues"
+  },
+  "homepage": "https://github.com/syndbg/node-dbf-reader-writer"
+}
