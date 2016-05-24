@@ -10,17 +10,23 @@ const FIELD_TYPES = {
 
 const FIELD_SIZES = {
     C: 254,
+    string: 254,
     L: 1,
+    boolean: 1,
     D: 8,
-    N: 18
+    N: 18,
+    number: 18
 };
 
+const ZERO_FILL_CHAR = '\u0000';
 const FIELD_OFFSET_SIZE = 32;
 const FIELD_DELIMITER = 0x0D;
-const RECORD_DELETED = 0x2A; // asterisk
+const RECORD_DELETED = 0x2A;
+const RECORD_NOT_DELETED = 0x20;
+const EOF_FLAG = 0x1A;
 
 function zeroFill(value, desiredLength, direction = 'left') {
-    const zeroes = '0'.repeat(desiredLength - value.length);
+    const zeroes = ZERO_FILL_CHAR.repeat(desiredLength - value.length);
     switch (direction) {
     case 'left':
         return zeroes + value;
@@ -87,7 +93,7 @@ function decodeField(buff, fieldOffset) {
     return {
         // NOTE: Field names are zero-filled ASCII-encoded 11 bytes long strings.
         // Remove the zero-filled characters in the string.
-        name: fieldBuff.toString('ascii', 0, 11).replace(/\u0000/g, ''),
+        name: fieldBuff.toString('ascii', 0, 11).replace(new RegExp(ZERO_FILL_CHAR, 'g'), ''),
         type: FIELD_TYPES[fieldBuff.toString('ascii', 11, 12)],
         length: fieldBuff[16]
     };
@@ -119,7 +125,8 @@ function decodeRecords(buff, fields, header) {
             record[field.name] = Type(buff.toString('ascii',
                                                     recordOffset,
                                                     recordOffset + field.length
-                                                   ).trim()
+                                                   ).replace(new RegExp(ZERO_FILL_CHAR, 'g'), '')
+                                                   .trim()
                                      );
             recordOffset += field.length;
         }
@@ -139,21 +146,57 @@ function decode(buff) {
 
 fs.readFile('./world.dbf', (err, buff) => {
     const { header, fields, records } = decode(buff);
-    console.log('Start encoding!');
 
     // Encode back
     let headerBuffer = encodeHeader(new Buffer(32), fields, records);
-
-    let fileBuffer = Buffer.concat([headerBuffer], headerBuffer.length);
-
     let fieldBuffers = fields.map((field) => encodeField(field));
+    let recordBuffers = [];
 
-    fileBuffer = Buffer.concat([fileBuffer, ...fieldBuffers],
+    // TODO: Just for prototyping fast.
+    records.slice(0, 1).forEach((record) => {
+        debugger;
+        const recordFields = Object.keys(record);
+        const bufferLength = recordFields.reduce((memo, key) => {
+            return memo + FIELD_SIZES[typeof record[key]];
+        }, 0);
+        let recordBuffer = new Buffer(bufferLength);
+        let buffPosition = 0;
+        recordBuffer.writeUInt8(record._isDel ? RECORD_DELETED : RECORD_NOT_DELETED, buffPosition, 1);
+        buffPosition++;
+        recordFields.filter((f) => !f.startsWith('_')).forEach((recordField) => {
+            const type = typeof record[recordField];
+            const size = FIELD_SIZES[type];
+            switch (type) {
+            case 'string':
+                let zeroFilledString = zeroFill(record[recordField], size, 'right');
+
+                recordBuffer.asciiWrite(zeroFilledString, buffPosition, size);
+
+                buffPosition += size;
+                break;
+            case 'number':
+                let zeroFilledNumber = zeroFill(record[recordField].toString(), size, 'left');
+
+                for (let i = 0; i < size; i++ ) {
+                    recordBuffer.writeUInt8(zeroFilledNumber[i], buffPosition++, 1);
+                }
+
+                break;
+            }
+        });
+        recordBuffers.push(recordBuffer);
+    });
+
+    const recordsLength = header.bytesPerRecord * records.length;
+    let fileBuffer = Buffer.concat([headerBuffer,
+                                ...fieldBuffers,
+                                ...recordBuffers],
                                fieldBuffers.reduce((memo, buff) => {
         return memo + buff.length;
-    }, fileBuffer.length + 1)); // add + 1 for the field delimiter
+    }, headerBuffer.length + recordsLength));
 
     fileBuffer.writeUInt8(FIELD_DELIMITER, FIELD_OFFSET_SIZE * fields.length, 1);
+    fileBuffer.writeUInt8(EOF_FLAG, fileBuffer.length, 1);
 
     fs.writeFile('./new.dbf', fileBuffer, () => {
         fs.readFile('./new.dbf', (err, newBuff) => {
@@ -167,9 +210,9 @@ fs.readFile('./world.dbf', (err, buff) => {
 function readBuffer(buffer) {
     // Decode
     const header = decodeHeader(buffer);
-    console.log(header);
+    // console.log(header);
     const fields = decodeFields(buffer);
-    console.log(fields);
-    // let records = decodeRecords(buffer, fields, header);
-    // console.log(records);
+    // console.log(fields);
+    let records = decodeRecords(buffer, fields, header);
+    console.log(records[0]);
 }
